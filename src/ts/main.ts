@@ -1,6 +1,6 @@
 import { initThemes } from './themes';
 import { initSettings } from './settings';
-import { initLinks, getLinksConfig } from './links';
+import { initLinks, initLinksEditor, getLinksConfig } from './links';
 import { initSearchEngine, loadShortcuts, syncBookmarkShortcuts, updateSearchSuggestions, handleSearchKeyDown, handleSearch, clearSearchInput } from './search';
 import { checkLocalServices } from './services';
 function updateClockDisplay(): void {
@@ -49,6 +49,7 @@ function initHelpModal(): void {
 document.addEventListener('DOMContentLoaded', async () => {
 	initThemes();
 	initLinks();
+	initLinksEditor();
 	initSettings();
 	initSearchEngine();
 	initHelpModal();

@@ -1,4 +1,5 @@
 import { syncBookmarkShortcuts } from './search';
+import { checkLocalServices } from './services';
 
 export interface BookmarkLink {
 	name: string;
@@ -317,4 +318,329 @@ export function initLinks(): void {
 		renderSidebarImage();
 	}
 	syncBookmarkShortcuts(getLinksConfig().categories);
+}
+
+/* ==========================================================================
+   SETTINGS EDITOR
+   ========================================================================== */
+let editorConfig: LinksConfig = getLinksConfig();
+let editorBuilt = false;
+
+function buildIconSelect(selected: string): HTMLSelectElement {
+	const select = document.createElement('select');
+	select.className = 'form-select icon-select';
+	for (const key of Object.keys(ICON_LIBRARY)) {
+		const opt = document.createElement('option');
+		opt.value = key;
+		opt.textContent = ICON_LIBRARY[key].label;
+		if (key === selected) opt.selected = true;
+		select.appendChild(opt);
+	}
+	return select;
+}
+
+function readEditorState(): LinksConfig {
+	const bookmarksEditor = document.getElementById('bookmarks-editor');
+	const servicesEditor = document.getElementById('services-editor');
+	const categories: BookmarkCategory[] = [];
+
+	if (bookmarksEditor) {
+		bookmarksEditor.querySelectorAll<HTMLElement>('.editor-category').forEach(catEl => {
+			const titleInput = catEl.querySelector<HTMLInputElement>('.editor-category-title');
+			const links: BookmarkLink[] = [];
+			catEl.querySelectorAll<HTMLElement>('.editor-link-row').forEach(row => {
+				const name = row.querySelector<HTMLInputElement>('.editor-link-name')?.value.trim() ?? '';
+				const url = row.querySelector<HTMLInputElement>('.editor-link-url')?.value.trim() ?? '';
+				if (name || url) links.push({ name, url });
+			});
+			categories.push({ category: titleInput?.value.trim() ?? '', links });
+		});
+	}
+
+	const services: HomelabService[] = [];
+	if (servicesEditor) {
+		servicesEditor.querySelectorAll<HTMLElement>('.editor-service-row').forEach(row => {
+			const name = row.querySelector<HTMLInputElement>('.editor-service-name')?.value.trim() ?? '';
+			const url = row.querySelector<HTMLInputElement>('.editor-service-url')?.value.trim() ?? '';
+			const icon = row.querySelector<HTMLSelectElement>('.icon-select')?.value ?? 'globe';
+			if (name || url) services.push({ name, url, icon });
+		});
+	}
+
+	const imageSrcInput = document.getElementById('editor-image-src') as HTMLInputElement | null;
+	const imageHrefInput = document.getElementById('editor-image-href') as HTMLInputElement | null;
+	const image: ImageConfig = {
+		src: imageSrcInput?.value.trim() || DEFAULT_IMAGE.src,
+		href: imageHrefInput?.value.trim() || DEFAULT_IMAGE.href
+	};
+
+	return { categories, services, image };
+}
+
+function onEditorInputChange(event: Event): void {
+	const target = event.target as HTMLElement;
+	editorConfig = readEditorState();
+	saveLinksConfig(editorConfig);
+
+	if (
+		target.classList.contains('editor-service-name') ||
+		target.classList.contains('editor-service-url') ||
+		target.classList.contains('icon-select')
+	) {
+		renderHomelabServices();
+	} else if (
+		target.id === 'editor-image-src' ||
+		target.id === 'editor-image-href'
+	) {
+		renderSidebarImage();
+	} else {
+		renderBookmarks();
+	}
+}
+
+function buildLinkRow(catIndex: number, linkIndex: number, link: BookmarkLink): HTMLElement {
+	const row = document.createElement('div');
+	row.className = 'editor-link-row';
+
+	const nameInput = document.createElement('input');
+	nameInput.type = 'text';
+	nameInput.className = 'form-input editor-input editor-link-name';
+	nameInput.value = link.name;
+	nameInput.placeholder = 'Name';
+	nameInput.addEventListener('input', onEditorInputChange);
+	row.appendChild(nameInput);
+
+	const urlInput = document.createElement('input');
+	urlInput.type = 'text';
+	urlInput.className = 'form-input editor-input editor-link-url';
+	urlInput.value = link.url;
+	urlInput.placeholder = 'https://';
+	urlInput.addEventListener('input', onEditorInputChange);
+	row.appendChild(urlInput);
+
+	const removeBtn = document.createElement('button');
+	removeBtn.type = 'button';
+	removeBtn.className = 'editor-remove-btn';
+	removeBtn.textContent = '×';
+	removeBtn.title = 'Remove link';
+	removeBtn.addEventListener('click', () => {
+		editorConfig.categories[catIndex].links.splice(linkIndex, 1);
+		saveLinksConfig(editorConfig);
+		buildBookmarksEditor();
+		renderBookmarks();
+	});
+	row.appendChild(removeBtn);
+	return row;
+}
+
+function buildBookmarksEditor(): void {
+	const container = document.getElementById('bookmarks-editor');
+	if (!container) return;
+	container.innerHTML = '';
+
+	editorConfig.categories.forEach((category, catIndex) => {
+		const catEl = document.createElement('div');
+		catEl.className = 'editor-category';
+
+		const header = document.createElement('div');
+		header.className = 'editor-category-header';
+
+		const titleInput = document.createElement('input');
+		titleInput.type = 'text';
+		titleInput.className = 'form-input editor-input editor-category-title';
+		titleInput.value = category.category;
+		titleInput.placeholder = 'Category title (e.g. ~/dev)';
+		titleInput.addEventListener('input', onEditorInputChange);
+		header.appendChild(titleInput);
+
+		const removeCatBtn = document.createElement('button');
+		removeCatBtn.type = 'button';
+		removeCatBtn.className = 'editor-remove-btn';
+		removeCatBtn.textContent = '×';
+		removeCatBtn.title = 'Remove category';
+		removeCatBtn.addEventListener('click', () => {
+			editorConfig.categories.splice(catIndex, 1);
+			saveLinksConfig(editorConfig);
+			buildBookmarksEditor();
+			renderBookmarks();
+		});
+		header.appendChild(removeCatBtn);
+		catEl.appendChild(header);
+
+		const linksWrap = document.createElement('div');
+		linksWrap.className = 'editor-links';
+		category.links.forEach((link, linkIndex) => {
+			linksWrap.appendChild(buildLinkRow(catIndex, linkIndex, link));
+		});
+		catEl.appendChild(linksWrap);
+
+		const addLinkBtn = document.createElement('button');
+		addLinkBtn.type = 'button';
+		addLinkBtn.className = 'editor-add-btn';
+		addLinkBtn.textContent = '+ Add Link';
+		addLinkBtn.addEventListener('click', () => {
+			editorConfig.categories[catIndex].links.push({ name: '', url: '' });
+			saveLinksConfig(editorConfig);
+			buildBookmarksEditor();
+			renderBookmarks();
+		});
+		catEl.appendChild(addLinkBtn);
+
+		container.appendChild(catEl);
+	});
+
+	const addCatBtn = document.createElement('button');
+	addCatBtn.type = 'button';
+	addCatBtn.className = 'editor-add-btn editor-add-btn-block';
+	addCatBtn.textContent = '+ Add Category';
+	addCatBtn.addEventListener('click', () => {
+		editorConfig.categories.push({ category: '~/new', links: [] });
+		saveLinksConfig(editorConfig);
+		buildBookmarksEditor();
+		renderBookmarks();
+	});
+	container.appendChild(addCatBtn);
+}
+
+function buildServiceRow(index: number, service: HomelabService): HTMLElement {
+	const row = document.createElement('div');
+	row.className = 'editor-service-row';
+
+	const nameInput = document.createElement('input');
+	nameInput.type = 'text';
+	nameInput.className = 'form-input editor-input editor-service-name';
+	nameInput.value = service.name;
+	nameInput.placeholder = 'Name';
+	nameInput.addEventListener('input', onEditorInputChange);
+	row.appendChild(nameInput);
+
+	const urlInput = document.createElement('input');
+	urlInput.type = 'text';
+	urlInput.className = 'form-input editor-input editor-service-url';
+	urlInput.value = service.url;
+	urlInput.placeholder = 'http://';
+	urlInput.addEventListener('input', onEditorInputChange);
+	row.appendChild(urlInput);
+
+	const iconSelect = buildIconSelect(service.icon);
+	iconSelect.addEventListener('change', onEditorInputChange);
+	row.appendChild(iconSelect);
+
+	const removeBtn = document.createElement('button');
+	removeBtn.type = 'button';
+	removeBtn.className = 'editor-remove-btn';
+	removeBtn.textContent = '×';
+	removeBtn.title = 'Remove service';
+	removeBtn.addEventListener('click', () => {
+		editorConfig.services.splice(index, 1);
+		saveLinksConfig(editorConfig);
+		buildServicesEditor();
+		renderHomelabServices();
+		checkLocalServices();
+	});
+	row.appendChild(removeBtn);
+	return row;
+}
+
+function buildServicesEditor(): void {
+	const container = document.getElementById('services-editor');
+	if (!container) return;
+	container.innerHTML = '';
+
+	editorConfig.services.forEach((service, index) => {
+		container.appendChild(buildServiceRow(index, service));
+	});
+
+	const addBtn = document.createElement('button');
+	addBtn.type = 'button';
+	addBtn.className = 'editor-add-btn editor-add-btn-block';
+	addBtn.textContent = '+ Add Service';
+	addBtn.addEventListener('click', () => {
+		editorConfig.services.push({ name: '', url: '', icon: 'globe' });
+		saveLinksConfig(editorConfig);
+		buildServicesEditor();
+		renderHomelabServices();
+		checkLocalServices();
+	});
+	container.appendChild(addBtn);
+}
+
+function buildImageEditor(): void {
+	const container = document.getElementById('image-editor');
+	if (!container) return;
+	container.innerHTML = '';
+
+	const row = document.createElement('div');
+	row.className = 'editor-image-row';
+
+	const srcInput = document.createElement('input');
+	srcInput.type = 'text';
+	srcInput.id = 'editor-image-src';
+	srcInput.className = 'form-input editor-input editor-image-src';
+	srcInput.value = editorConfig.image.src;
+	srcInput.placeholder = 'Image URL or path (/src/assets/images/img.webp)';
+	srcInput.addEventListener('input', onEditorInputChange);
+	row.appendChild(srcInput);
+
+	const hrefInput = document.createElement('input');
+	hrefInput.type = 'text';
+	hrefInput.id = 'editor-image-href';
+	hrefInput.className = 'form-input editor-input editor-image-href';
+	hrefInput.value = editorConfig.image.href;
+	hrefInput.placeholder = 'Click link (https://)';
+	hrefInput.addEventListener('input', onEditorInputChange);
+	row.appendChild(hrefInput);
+
+	container.appendChild(row);
+}
+
+function buildAllEditors(): void {
+	editorConfig = getLinksConfig();
+	buildBookmarksEditor();
+	buildServicesEditor();
+	buildImageEditor();
+}
+
+export function ensureLinksEditorsBuilt(): void {
+	if (editorBuilt) return;
+	editorBuilt = true;
+	buildAllEditors();
+}
+
+/**
+ * Rebuild the editors from current storage. Used after an out-of-band
+ * mutation (e.g. YAML import) so the editor reflects the new data.
+ */
+export function refreshLinksEditors(): void {
+	if (!editorBuilt) return;
+	buildAllEditors();
+}
+
+export function initLinksEditor(): void {
+	editorConfig = getLinksConfig();
+
+	const bookmarksReset = document.getElementById('bookmarks-reset');
+	bookmarksReset?.addEventListener('click', () => {
+		editorConfig.categories = structuredClone(DEFAULT_BOOKMARKS);
+		saveLinksConfig(editorConfig);
+		buildBookmarksEditor();
+		renderBookmarks();
+	});
+
+	const servicesReset = document.getElementById('services-reset');
+	servicesReset?.addEventListener('click', () => {
+		editorConfig.services = structuredClone(DEFAULT_SERVICES);
+		saveLinksConfig(editorConfig);
+		buildServicesEditor();
+		renderHomelabServices();
+		checkLocalServices();
+	});
+
+	const imageReset = document.getElementById('image-reset');
+	imageReset?.addEventListener('click', () => {
+		editorConfig.image = structuredClone(DEFAULT_IMAGE);
+		saveLinksConfig(editorConfig);
+		buildImageEditor();
+		renderSidebarImage();
+	});
 }

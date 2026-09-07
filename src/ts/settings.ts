@@ -7,11 +7,12 @@ import {
 	renderBookmarks,
 	renderHomelabServices,
 	renderSidebarImage,
+	ensureLinksEditorsBuilt,
+	refreshLinksEditors,
 	BookmarkCategory,
 	BookmarkLink,
 	HomelabService,
-	ImageConfig,
-	DEFAULT_IMAGE
+	ImageConfig
 } from './links';
 import { checkLocalServices } from './services';
 
@@ -214,9 +215,6 @@ function applySettings(data: ParsedImportData, controls: SettingsControls): void
 		if (data.image.src) currentConfig.image.src = data.image.src;
 		saveLinksConfig(currentConfig);
 		renderSidebarImage();
-		if (controls.imageHrefInput) {
-			controls.imageHrefInput.value = currentConfig.image.href;
-		}
 	}
 
 	if (data.bookmarks || data.services) {
@@ -236,13 +234,15 @@ function applySettings(data: ParsedImportData, controls: SettingsControls): void
 			checkLocalServices();
 		}
 	}
+
+	// Keep the in-modal editors in sync after an out-of-band YAML import.
+	refreshLinksEditors();
 }
 
 interface SettingsControls {
 	lightSelect: HTMLSelectElement;
 	darkSelect: HTMLSelectElement;
 	engineSelect: HTMLSelectElement;
-	imageHrefInput: HTMLInputElement | null;
 }
 
 export function initSettings(): void {
@@ -252,35 +252,22 @@ export function initSettings(): void {
 	const lightSelect = document.getElementById('light-theme-select') as HTMLSelectElement | null;
 	const darkSelect = document.getElementById('dark-theme-select') as HTMLSelectElement | null;
 	const engineSelect = document.getElementById('search-engine-select') as HTMLSelectElement | null;
-	const imageHrefInput = document.getElementById('image-href-input') as HTMLInputElement | null;
 	const exportBtn = document.getElementById('settings-export');
 	const importBtn = document.getElementById('settings-import');
 	const importInput = document.getElementById('settings-import-input') as HTMLInputElement | null;
 
 	if (!modal || !toggleBtn || !closeBtn || !lightSelect || !darkSelect || !engineSelect) return;
 
-	const controls: SettingsControls = { lightSelect, darkSelect, engineSelect, imageHrefInput };
+	const controls: SettingsControls = { lightSelect, darkSelect, engineSelect };
 
 	const currentPreferences = getThemeSettings();
-	const currentLinks = getLinksConfig();
 
 	lightSelect.value = currentPreferences.preferredLight;
 	darkSelect.value = currentPreferences.preferredDark;
 	engineSelect.value = getSavedSearchEngine();
-	if (imageHrefInput) {
-		imageHrefInput.value = currentLinks.image.href;
-		imageHrefInput.addEventListener('input', () => {
-			const cfg = getLinksConfig();
-			cfg.image.href = imageHrefInput.value.trim() || DEFAULT_IMAGE.href;
-			saveLinksConfig(cfg);
-			renderSidebarImage();
-		});
-	}
 
 	toggleBtn.addEventListener('click', () => {
-		if (imageHrefInput) {
-			imageHrefInput.value = getLinksConfig().image.href;
-		}
+		ensureLinksEditorsBuilt();
 		modal.showModal();
 	});
 	closeBtn.addEventListener('click', () => modal.close());
