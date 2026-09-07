@@ -519,6 +519,29 @@
 	box-shadow: 0 0 0 1px var(--drx-color-accent);
 }
 
+.form-input {
+	padding: 0.65rem 1rem;
+	background-color: var(--drx-color-overlay);
+	border: var(--drx-border-subtle);
+	border-radius: var(--drx-radius-element);
+	color: var(--drx-color-text);
+	font-family: var(--drx-font-main);
+	font-size: 0.9rem;
+	outline: none;
+	transition: background-color var(--drx-transition-fast), border-color var(--drx-transition-fast), box-shadow var(--drx-transition-fast);
+}
+
+.form-input:hover {
+	background-color: var(--drx-color-highlight);
+	border-color: var(--drx-color-highlight);
+}
+
+.form-input:focus {
+	background-color: var(--drx-color-base);
+	border-color: var(--drx-color-accent);
+	box-shadow: 0 0 0 1px var(--drx-color-accent);
+}
+
 .help-body {
 	display: flex;
 	flex-direction: column;

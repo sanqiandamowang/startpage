@@ -1,62 +1,178 @@
 import { getThemeSettings, saveThemeSettings, ThemeSettings } from './themes';
 import { getSavedSearchEngine } from './search';
 import { parseYaml, stringifyYaml, YamlMap } from './yaml';
+import {
+	getLinksConfig,
+	saveLinksConfig,
+	renderBookmarks,
+	renderHomelabServices,
+	renderSidebarImage,
+	BookmarkCategory,
+	BookmarkLink,
+	HomelabService,
+	ImageConfig,
+	DEFAULT_IMAGE
+} from './links';
+import { checkLocalServices } from './services';
 
-interface AppSettings {
-	preferredLightTheme: string;
-	preferredDarkTheme: string;
-	searchEngine: string;
+interface StartpageExportData {
+	settings: {
+		preferredLightTheme: string;
+		preferredDarkTheme: string;
+		searchEngine: string;
+	};
+	image: ImageConfig;
+	bookmarks: BookmarkCategory[];
+	services: HomelabService[];
+}
+
+interface ParsedImportData {
+	settings?: {
+		preferredLightTheme: string;
+		preferredDarkTheme: string;
+		searchEngine: string;
+	};
+	image?: Partial<ImageConfig>;
+	bookmarks?: BookmarkCategory[];
+	services?: HomelabService[];
 }
 
 const SETTINGS_FILE_NAME = 'startpage-settings.yml';
 
-function collectCurrentSettings(): AppSettings {
+function collectCurrentSettings(): StartpageExportData {
 	const theme = getThemeSettings();
+	const links = getLinksConfig();
 	return {
-		preferredLightTheme: theme.preferredLight,
-		preferredDarkTheme: theme.preferredDark,
-		searchEngine: getSavedSearchEngine()
+		settings: {
+			preferredLightTheme: theme.preferredLight,
+			preferredDarkTheme: theme.preferredDark,
+			searchEngine: getSavedSearchEngine()
+		},
+		image: links.image,
+		bookmarks: links.categories,
+		services: links.services
 	};
 }
 
-function buildYaml(settings: AppSettings): string {
+function buildYaml(data: StartpageExportData): string {
 	const yamlData: YamlMap = {
 		startpage: {
 			settings: {
-				preferred_light_theme: settings.preferredLightTheme,
-				preferred_dark_theme: settings.preferredDarkTheme,
-				search_engine: settings.searchEngine
-			}
+				preferred_light_theme: data.settings.preferredLightTheme,
+				preferred_dark_theme: data.settings.preferredDarkTheme,
+				search_engine: data.settings.searchEngine
+			},
+			image: {
+				href: data.image.href,
+				src: data.image.src
+			},
+			bookmarks: data.bookmarks.map(cat => ({
+				category: cat.category,
+				links: cat.links.map(link => ({
+					name: link.name,
+					url: link.url
+				}))
+			})),
+			services: data.services.map(service => ({
+				name: service.name,
+				url: service.url,
+				icon: service.icon
+			}))
 		}
 	};
 	return stringifyYaml(yamlData);
 }
 
-function extractSettingsFromYaml(yamlText: string): AppSettings {
+function extractSettingsFromYaml(yamlText: string): ParsedImportData {
 	const root = parseYaml(yamlText);
-	const startpage = root.startpage;
-	if (!startpage || typeof startpage !== 'object' || Array.isArray(startpage)) {
-		throw new Error('Missing "startpage" root mapping in the imported file.');
-	}
-	const settingsNode = (startpage as YamlMap).settings;
-	if (!settingsNode || typeof settingsNode !== 'object' || Array.isArray(settingsNode)) {
-		throw new Error('Missing "startpage.settings" mapping in the imported file.');
-	}
-	const settings = settingsNode as YamlMap;
+	const startpage = (root.startpage && typeof root.startpage === 'object' && !Array.isArray(root.startpage))
+		? (root.startpage as YamlMap)
+		: root;
 
-	const preferredLightTheme = settings.preferred_light_theme;
-	const preferredDarkTheme = settings.preferred_dark_theme;
-	const searchEngine = settings.search_engine;
+	const result: ParsedImportData = {};
 
-	if (typeof preferredLightTheme !== 'string' || typeof preferredDarkTheme !== 'string' || typeof searchEngine !== 'string') {
-		throw new Error('Imported settings must contain string values for themes and search engine.');
+	if (startpage.settings && typeof startpage.settings === 'object' && !Array.isArray(startpage.settings)) {
+		const s = startpage.settings as YamlMap;
+		const preferredLightTheme = typeof s.preferred_light_theme === 'string' ? s.preferred_light_theme : undefined;
+		const preferredDarkTheme = typeof s.preferred_dark_theme === 'string' ? s.preferred_dark_theme : undefined;
+		const searchEngine = typeof s.search_engine === 'string' ? s.search_engine : undefined;
+		if (preferredLightTheme && preferredDarkTheme && searchEngine) {
+			result.settings = {
+				preferredLightTheme,
+				preferredDarkTheme,
+				searchEngine
+			};
+		}
 	}
 
-	return {
-		preferredLightTheme,
-		preferredDarkTheme,
-		searchEngine
-	};
+	const imageNode = startpage.image || root.image;
+	if (imageNode && typeof imageNode === 'object' && !Array.isArray(imageNode)) {
+		const imgMap = imageNode as YamlMap;
+		const href = typeof imgMap.href === 'string' ? imgMap.href : typeof imgMap.url === 'string' ? imgMap.url : undefined;
+		const src = typeof imgMap.src === 'string' ? imgMap.src : undefined;
+		if (href || src) {
+			result.image = { href, src };
+		}
+	} else if (startpage.settings && typeof startpage.settings === 'object') {
+		const s = startpage.settings as YamlMap;
+		const href = typeof s.image_href === 'string' ? s.image_href : typeof s.image_url === 'string' ? s.image_url : undefined;
+		if (href) {
+			result.image = { href };
+		}
+	}
+
+	const bookmarksNode = startpage.bookmarks || root.bookmarks;
+	if (Array.isArray(bookmarksNode)) {
+		const categories: BookmarkCategory[] = [];
+		for (const catNode of bookmarksNode) {
+			if (!catNode || typeof catNode !== 'object' || Array.isArray(catNode)) continue;
+			const catMap = catNode as YamlMap;
+			const category = typeof catMap.category === 'string'
+				? catMap.category
+				: typeof catMap.title === 'string'
+					? catMap.title
+					: '';
+			const rawLinks = Array.isArray(catMap.links) ? catMap.links : [];
+			const links: BookmarkLink[] = [];
+			for (const linkNode of rawLinks) {
+				if (!linkNode || typeof linkNode !== 'object' || Array.isArray(linkNode)) continue;
+				const linkMap = linkNode as YamlMap;
+				const name = typeof linkMap.name === 'string' ? linkMap.name : '';
+				const url = typeof linkMap.url === 'string' ? linkMap.url : '';
+				if (name || url) {
+					links.push({ name, url });
+				}
+			}
+			categories.push({ category, links });
+		}
+		if (categories.length > 0) {
+			result.bookmarks = categories;
+		}
+	}
+
+	const servicesNode = startpage.services || root.services;
+	if (Array.isArray(servicesNode)) {
+		const services: HomelabService[] = [];
+		for (const sNode of servicesNode) {
+			if (!sNode || typeof sNode !== 'object' || Array.isArray(sNode)) continue;
+			const sMap = sNode as YamlMap;
+			const name = typeof sMap.name === 'string' ? sMap.name : '';
+			const url = typeof sMap.url === 'string' ? sMap.url : '';
+			const icon = typeof sMap.icon === 'string' ? sMap.icon : 'globe';
+			if (name || url) {
+				services.push({ name, url, icon });
+			}
+		}
+		if (services.length > 0) {
+			result.services = services;
+		}
+	}
+
+	if (!result.settings && !result.bookmarks && !result.services && !result.image) {
+		throw new Error('No valid startpage settings, bookmarks, services, or image found in the imported YAML.');
+	}
+
+	return result;
 }
 
 function downloadYaml(yamlText: string): void {
@@ -78,22 +194,55 @@ function showFeedback(message: string, type: 'success' | 'error'): void {
 	feedback.dataset.state = type;
 }
 
-function applySettings(settings: AppSettings, controls: SettingsControls): void {
-	controls.lightSelect.value = settings.preferredLightTheme;
-	controls.darkSelect.value = settings.preferredDarkTheme;
-	controls.engineSelect.value = settings.searchEngine;
+function applySettings(data: ParsedImportData, controls: SettingsControls): void {
+	if (data.settings) {
+		const { preferredLightTheme, preferredDarkTheme, searchEngine } = data.settings;
+		controls.lightSelect.value = preferredLightTheme;
+		controls.darkSelect.value = preferredDarkTheme;
+		controls.engineSelect.value = searchEngine;
 
-	saveThemeSettings({
-		preferredLight: settings.preferredLightTheme,
-		preferredDark: settings.preferredDarkTheme
-	});
-	localStorage.setItem('selectedSearchEngine', settings.searchEngine);
+		saveThemeSettings({
+			preferredLight: preferredLightTheme,
+			preferredDark: preferredDarkTheme
+		});
+		localStorage.setItem('selectedSearchEngine', searchEngine);
+	}
+
+	if (data.image) {
+		const currentConfig = getLinksConfig();
+		if (data.image.href) currentConfig.image.href = data.image.href;
+		if (data.image.src) currentConfig.image.src = data.image.src;
+		saveLinksConfig(currentConfig);
+		renderSidebarImage();
+		if (controls.imageHrefInput) {
+			controls.imageHrefInput.value = currentConfig.image.href;
+		}
+	}
+
+	if (data.bookmarks || data.services) {
+		const currentConfig = getLinksConfig();
+		if (data.bookmarks) {
+			currentConfig.categories = data.bookmarks;
+		}
+		if (data.services) {
+			currentConfig.services = data.services;
+		}
+		saveLinksConfig(currentConfig);
+		if (data.bookmarks) {
+			renderBookmarks();
+		}
+		if (data.services) {
+			renderHomelabServices();
+			checkLocalServices();
+		}
+	}
 }
 
 interface SettingsControls {
 	lightSelect: HTMLSelectElement;
 	darkSelect: HTMLSelectElement;
 	engineSelect: HTMLSelectElement;
+	imageHrefInput: HTMLInputElement | null;
 }
 
 export function initSettings(): void {
@@ -103,21 +252,37 @@ export function initSettings(): void {
 	const lightSelect = document.getElementById('light-theme-select') as HTMLSelectElement | null;
 	const darkSelect = document.getElementById('dark-theme-select') as HTMLSelectElement | null;
 	const engineSelect = document.getElementById('search-engine-select') as HTMLSelectElement | null;
+	const imageHrefInput = document.getElementById('image-href-input') as HTMLInputElement | null;
 	const exportBtn = document.getElementById('settings-export');
 	const importBtn = document.getElementById('settings-import');
 	const importInput = document.getElementById('settings-import-input') as HTMLInputElement | null;
 
 	if (!modal || !toggleBtn || !closeBtn || !lightSelect || !darkSelect || !engineSelect) return;
 
-	const controls: SettingsControls = { lightSelect, darkSelect, engineSelect };
+	const controls: SettingsControls = { lightSelect, darkSelect, engineSelect, imageHrefInput };
 
 	const currentPreferences = getThemeSettings();
+	const currentLinks = getLinksConfig();
 
 	lightSelect.value = currentPreferences.preferredLight;
 	darkSelect.value = currentPreferences.preferredDark;
 	engineSelect.value = getSavedSearchEngine();
+	if (imageHrefInput) {
+		imageHrefInput.value = currentLinks.image.href;
+		imageHrefInput.addEventListener('input', () => {
+			const cfg = getLinksConfig();
+			cfg.image.href = imageHrefInput.value.trim() || DEFAULT_IMAGE.href;
+			saveLinksConfig(cfg);
+			renderSidebarImage();
+		});
+	}
 
-	toggleBtn.addEventListener('click', () => modal.showModal());
+	toggleBtn.addEventListener('click', () => {
+		if (imageHrefInput) {
+			imageHrefInput.value = getLinksConfig().image.href;
+		}
+		modal.showModal();
+	});
 	closeBtn.addEventListener('click', () => modal.close());
 
 	modal.addEventListener('click', (event: MouseEvent) => {

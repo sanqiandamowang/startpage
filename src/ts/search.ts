@@ -99,6 +99,23 @@ export async function loadShortcuts(): Promise<void> {
 	}
 }
 
+export function syncBookmarkShortcuts(categories: Array<{ category?: string; title?: string; links: Array<{ name: string; url: string }> }>): void {
+	const bookmarkShortcuts: ShortcutItem[] = [];
+	for (const cat of categories) {
+		if (!Array.isArray(cat.links)) continue;
+		for (const link of cat.links) {
+			if (link && link.name && link.url) {
+				bookmarkShortcuts.push({ name: link.name, url: link.url });
+			}
+		}
+	}
+	const urls = new Set(bookmarkShortcuts.map(s => s.url));
+	shortcutsList = [
+		...bookmarkShortcuts,
+		...shortcutsList.filter(s => !urls.has(s.url))
+	];
+}
+
 export function updateSearchSuggestions(inputVal: string): void {
 	const query = inputVal.toLowerCase().trim();
 	const ghostElement = document.getElementById('search-ghost');
@@ -227,12 +244,14 @@ export function handleSearch(query: string): void {
 	window.location.href = `${getSavedSearchEngine()}${encodeURIComponent(trimmedQuery)}`;
 }
 
-document.addEventListener('click', (event: MouseEvent) => {
-	const searchWrapper = document.querySelector('.search-wrapper');
-	const suggestionsElement = document.getElementById('search-suggestions');
-	
-	if (searchWrapper && suggestionsElement && !searchWrapper.contains(event.target as Node)) {
-		suggestionsElement.style.display = 'none';
-		activeSuggestionIndex = -1;
-	}
-});
+if (typeof document !== 'undefined') {
+	document.addEventListener('click', (event: MouseEvent) => {
+		const searchWrapper = document.querySelector('.search-wrapper');
+		const suggestionsElement = document.getElementById('search-suggestions');
+		
+		if (searchWrapper && suggestionsElement && !searchWrapper.contains(event.target as Node)) {
+			suggestionsElement.style.display = 'none';
+			activeSuggestionIndex = -1;
+		}
+	});
+}

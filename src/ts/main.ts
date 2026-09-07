@@ -1,8 +1,8 @@
 import { initThemes } from './themes';
 import { initSettings } from './settings';
-import { initSearchEngine, loadShortcuts, updateSearchSuggestions, handleSearchKeyDown, handleSearch, clearSearchInput } from './search';
+import { initLinks, getLinksConfig } from './links';
+import { initSearchEngine, loadShortcuts, syncBookmarkShortcuts, updateSearchSuggestions, handleSearchKeyDown, handleSearch, clearSearchInput } from './search';
 import { checkLocalServices } from './services';
-
 function updateClockDisplay(): void {
 	const dateTimeDisplay = document.getElementById('datetime-display');
 	if (!dateTimeDisplay) return;
@@ -48,10 +48,12 @@ function initHelpModal(): void {
 
 document.addEventListener('DOMContentLoaded', async () => {
 	initThemes();
+	initLinks();
 	initSettings();
 	initSearchEngine();
 	initHelpModal();
 	await loadShortcuts();
+	syncBookmarkShortcuts(getLinksConfig().categories);
 
 	checkLocalServices();
 	updateClockDisplay();
