@@ -170,6 +170,18 @@
 						<option value="ayu-light">Ayu Light</option>
 					</select>
 				</div>
+
+				<hr class="modal-divider">
+
+				<div class="form-group">
+					<label>Settings Backup</label>
+					<div class="config-actions">
+						<button type="button" id="settings-export" class="action-btn">Export YAML</button>
+						<button type="button" id="settings-import" class="action-btn">Import YAML</button>
+						<input type="file" id="settings-import-input" accept=".yml,.yaml,text/yaml,text/plain" hidden>
+					</div>
+					<p id="settings-feedback" class="settings-feedback" data-state="idle"></p>
+				</div>
 			</form>
 		</div>
 	</dialog>

@@ -569,6 +569,55 @@
 }
 
 /* ==========================================================================
+   6.5. SETTINGS BACKUP ACTIONS (EXPORT / IMPORT YAML)
+   ========================================================================== */
+.config-actions {
+	display: flex;
+	gap: 0.75rem;
+	flex-wrap: wrap;
+}
+
+.action-btn {
+	flex: 1 1 0;
+	min-width: 7rem;
+	padding: 0.65rem 1rem;
+	background-color: var(--drx-color-overlay);
+	border: var(--drx-border-subtle);
+	border-radius: var(--drx-radius-element);
+	color: var(--drx-color-text);
+	font-family: var(--drx-font-main);
+	font-size: 0.9rem;
+	cursor: pointer;
+	transition: background-color var(--drx-transition-fast), border-color var(--drx-transition-fast), color var(--drx-transition-fast), transform var(--drx-transition-fast);
+}
+
+.action-btn:hover {
+	background-color: var(--drx-color-highlight);
+	border-color: var(--drx-color-accent);
+	color: var(--drx-color-accent);
+}
+
+.action-btn:active {
+	transform: scale(0.97);
+}
+
+.settings-feedback {
+	margin: 0;
+	min-height: 1rem;
+	font-size: 0.8rem;
+	color: var(--drx-color-deactivate);
+	transition: color var(--drx-transition-fast);
+}
+
+.settings-feedback[data-state="success"] {
+	color: var(--drx-color-accent);
+}
+
+.settings-feedback[data-state="error"] {
+	color: var(--drx-color-focus);
+}
+
+/* ==========================================================================
    7. MODAL OVERLAY APPARITION ANIMATIONS
    ========================================================================== */
 dialog.config-modal[open] {
