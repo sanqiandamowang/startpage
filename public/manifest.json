@@ -1,0 +1,21 @@
+{
+	"manifest_version": 3,
+	"name": "Startpage",
+	"version": "2.0.0",
+	"description": "A minimalist startpage for quick access to your favorite websites, with search, themes, and homelab status.",
+	"icons": {
+		"16": "icon-16.png",
+		"32": "icon-32.png",
+		"48": "icon-48.png",
+		"128": "icon-128.png"
+	},
+	"chrome_url_overrides": {
+		"newtab": "index.html"
+	},
+	"permissions": [],
+	"host_permissions": [
+		"https://raw.githubusercontent.com/*",
+		"http://*/*",
+		"https://*/*"
+	]
+}
