@@ -151,7 +151,7 @@ const LINKS_STORAGE_KEY = 'startpage_links_config';
 
 export const DEFAULT_IMAGE: ImageConfig = {
 	href: 'https://druxorey.github.io/',
-	src: '/src/assets/images/img.webp'
+	src: '/img.webp'
 };
 
 function normalizeCategories(rawList: unknown[]): BookmarkCategory[] {
@@ -578,7 +578,7 @@ function buildImageEditor(): void {
 	srcInput.id = 'editor-image-src';
 	srcInput.className = 'form-input editor-input editor-image-src';
 	srcInput.value = editorConfig.image.src;
-	srcInput.placeholder = 'Image URL or path (/src/assets/images/img.webp)';
+	srcInput.placeholder = 'Image URL or path (/img.webp)';
 	srcInput.addEventListener('input', onEditorInputChange);
 	row.appendChild(srcInput);
 
